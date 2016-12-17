@@ -1,0 +1,10 @@
+@MEDIA (MAX-WIDTH: 1000PX) {
+	[CLASS|=a]~A::BEFORE{
+		content: "<!doctype><html><head><title>Test</title></head><body><b>I AM STRONG</b></body></html>";
+		background-image: url(console.log);
+	}
+}
+@-WEBKIT-KEYFRAMES a {
+	0% {}
+	100% {BACKGROUND-COLOR:#F00}
+}
