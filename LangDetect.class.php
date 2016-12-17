@@ -33,38 +33,39 @@ class LangDetect {
 		// track time
 		$startTime = microtime(1);
 		
+		// call all language classes
 		foreach ($this->langs as $lang) {
 			$lang = strtolower($lang);
 			$langClass = ucfirst($lang).'Lang';
 			if (file_exists("langs/$langClass.class.php")) {
 				require_once "langs/$langClass.class.php";
 				$class[$lang] = new $langClass($this->code, false);
-				$this->probabilities[$lang] = $class[$lang]->probability();
 			}
 		}
 		
-		### some bonuses for language specific stuff (like keywords)
+		### some bonuses and demerits for language specific stuff (like keywords)
 		
 		/* little collaboration between js and php, if both are active */
-		if (isset($this->probabilities['js'], $this->probabilities['php']) && $this->probabilities['js'] && $this->probabilities['php']) {
+		if (isset($class['js'], $class['php'])) {
 			if ($class['js']->get('allVarsPhpValid') !== null) {
 				// php bonus for "php valid variables" only
-				if ($class['js']->get('allVarsPhpValid') > 0) $this->probabilities['php'] *= 1.1; // increase php probability
-				elseif ($class['js']->get('allVarsPhpValid') < 0) $this->probabilities['php'] /= 1.1; // decrease php probability
+				switch ($class['js']->get('allVarsPhpValid')) {
+					// all variables are php valid, decrease js a bit
+					case 1:
+						$class['js']->set('demerit', $class['js']->get('variablesLen') / 2, '+');
+						break;
+					// not all variables are php valid, decrease php
+					case -1:
+						$class['php']->set('demerit', $class['js']->get('variablesLen'), '+');
+						break;
+				}
 			}
 		}
 		
-		// bonus for more native keyword replacements
-		$totalFoundKeywords = 0;
-		foreach ($class as $v) {
-			$totalFoundKeywords += $v->get('keywords', 0);
+		// fetch all probabilities and sort them
+		foreach ($class as $lang => $c) {
+			$this->probabilities[$lang] = $c->probability();
 		}
-		if ($totalFoundKeywords) {
-			foreach ($class as $k => $v) {
-				$this->probabilities[$k] *= 1 + $v->get('keywords', 0) / $totalFoundKeywords;
-			}
-		}
-		
 		arsort($this->probabilities, SORT_NUMERIC);
 		
 		echo 'time: '.round(microtime(1) - $startTime, 3).' s'.PHP_EOL;
@@ -75,7 +76,7 @@ class LangDetect {
 	 */
 	public function getProbabilities($total100 = false) {
 		if ($total100) {
-			/* output with total of 100% (1) */
+			/* output with total of 100% (1), good for comparisson, bad if the actual language is none of them */
 			$total = 0;
 			foreach ($this->probabilities as $k => $v) {
 				$total += $v;
