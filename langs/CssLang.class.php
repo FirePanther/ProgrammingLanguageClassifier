@@ -21,8 +21,6 @@ class CssLang extends Lang {
 	public function run() {
 		$this->rest = ' '.strtolower($this->code).' ';
 		
-		$this->keys['keywords'] = 0;
-		
 		// whitespaces
 		$this->rest = preg_replace('~\s+~', '', $this->rest);
 		// comments
@@ -48,11 +46,12 @@ class CssLang extends Lang {
 			$m[1] = preg_replace('~((^|;)[\w-]+\:[^;]+)+~', '', $m[1]);
 			return '{'.str_replace(';', '', $m[1]).'}';
 		}, $this->rest);
+		// selectors with round brackets
+		$this->rest = preg_replace('~\:\:?(lang\(\w*\)|not\([^\)]+\)|nth(\-last)?\-child\(\d+\)|nth(\-last)?\-of\-type\(\d+\))~', '', $this->rest);
 		// selectors
-		$this->rest = preg_replace_callback('~(?:^|\}|\{)([\w.\*\#>\+\~\[\]\%\|\^\$=\:\(\)\-"\',]+)\{~', function($m) {
+		$this->rest = preg_replace_callback('~(?:^|\}|\{)([\w.\*\#>\+\~\[\]\%\|\^\$=\:\-"\',]+)\{~', function($m) {
 			return '';
 			$m[1] = str_replace('*', '', $m[1]);
-			$m[1] = preg_replace('~\([^\)]*\)~', '', $m[1]); // for lang, not, nth-child, ...
 			$m[1] = preg_replace('~\d+\%~', '', $m[1]); // for keyframes
 			// :
 			$m[1] = preg_replace('~\:\:?\-[\w-]+~', '', $m[1]); // prefix
@@ -61,6 +60,7 @@ class CssLang extends Lang {
 				'nth\-last|-of\-type|nth\-of\-type|only\-of\-type|only\-child|optional|out\-of\-range|read\-only|read\-write|'.
 				'required|root|selection|target|valid|visited)(\W)~', function($m) {
 					$this->keys['keywords']++;
+					$this->keys['keywordsLen'] += strlen($m[0]) - strlen($m[1]);
 					return $m[1];
 				}, $m[1]);
 			// attributes
