@@ -14,7 +14,8 @@ abstract class Lang {
 		$this->code = $code;
 		$this->keys = [
 			'keywords' => 0,
-			'keywordsLen' => 0
+			'keywordsLen' => 0,
+			'demerit' => 0
 		];
 		$this->run();
 	}
@@ -35,7 +36,7 @@ abstract class Lang {
 	 * demerits, min (default): 0, max: length of rest
 	 */
 	public function demerit() {
-		return 0;
+		return $this->keys['demerit'];
 	}
 	
 	/**
@@ -52,7 +53,9 @@ abstract class Lang {
 		$codeLength = strlen($this->code);
 		if (!$codeLength) return 0;
 		$bonus = $this->keys['keywordsLen'];
-		return $this->hasErrors() ? 0 : (1 - (strlen($this->rest) + $this->demerit() - $bonus) / $codeLength);
+		$prob = 1 - (strlen($this->rest) + $this->demerit() - $bonus) / $codeLength;
+		if ($prob < 0) $prob = 0;
+		return $this->hasErrors() ? 0 : $prob;
 	}
 	
 	/**
