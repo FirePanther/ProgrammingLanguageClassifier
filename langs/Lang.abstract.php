@@ -12,6 +12,10 @@ abstract class Lang {
 	 */
 	function __construct($code) {
 		$this->code = $code;
+		$this->keys = [
+			'keywords' => 0,
+			'keywordsLen' => 0
+		];
 		$this->run();
 	}
 	
@@ -28,6 +32,13 @@ abstract class Lang {
 	}
 	
 	/**
+	 * demerits, min (default): 0, max: length of rest
+	 */
+	public function demerit() {
+		return 0;
+	}
+	
+	/**
 	 * returns if there were any errors (syntax errors just cancel the whole run and return probability 0)
 	 */
 	public function hasErrors() {
@@ -38,14 +49,36 @@ abstract class Lang {
 	 * the actual probability, if syntax errors were found the probability is 0
 	 */
 	public function probability() {
-		return $this->hasErrors() ? 0 : (1 - strlen($this->rest) / strlen($this->code));
+		$codeLength = strlen($this->code);
+		if (!$codeLength) return 0;
+		$bonus = $this->keys['keywordsLen'];
+		return $this->hasErrors() ? 0 : (1 - (strlen($this->rest) + $this->demerit() - $bonus) / $codeLength);
 	}
 	
 	/**
 	 * set a local variable
 	 */
-	protected function set($key, $val) {
-		$this->keys[$key] = $val;
+	public function set($key, $val, $action = null) {
+		switch ($action) {
+			case '.':
+			case '&':
+				$this->keys[$key] .= $val;
+				break;
+			case '+':
+				$this->keys[$key] += $val;
+				break;
+			case '-':
+				$this->keys[$key] -= $val;
+				break;
+			case '*':
+				$this->keys[$key] *= $val;
+				break;
+			case '/':
+				$this->keys[$key] /= $val;
+				break;
+			default:
+				$this->keys[$key] = $val;
+		}
 	}
 	
 	/**
