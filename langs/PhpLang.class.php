@@ -25,10 +25,10 @@ class PhpLang extends Lang {
 		$this->keys['stringsLen'] = 0;
 		$this->keys['commentsLen'] = 0;
 		
-		// escapes
-		$this->rest = preg_replace('~\\\\.~', '', $this->rest);
 		// scan the whole string (this was the safest solution)
 		$this->removeStringsAndComments();
+		// escapes
+		$this->rest = preg_replace('~\\\\.~', '', $this->rest); // remove escape after string&comment removal, else /* \*/ will be buggy
 		// no html (js code looks like php sometimes, so let's remove scripts)
 		$this->rest = preg_replace_callback('~<script[^>]*>.*</script>~is', function($m) {
 			$this->keys['demerit'] += strlen($m[0]);
@@ -45,11 +45,14 @@ class PhpLang extends Lang {
 			return;
 		}
 		// whitespaces
-		$this->rest = preg_replace('~\s+~', ' ', $this->rest);
+		$this->rest = preg_replace_callback('~ +~', function($m) {
+			$this->keys['demerit'] += strlen($m[0]) - 1;
+			return ' ';
+		}, $this->rest);
 		// nowdoc/heredoc
-		$this->rest = preg_replace_callback('~<<<\s*(\')?([a-z0-9]+)\1.*\n\2\;~siU', function($m) {
+		$this->rest = preg_replace_callback('~<<<\s*(\'|)([a-z0-9]+)\1\n.*\n\2\;~siU', function($m) {
 			$this->keys['keywords']++;
-			$this->keys['keywordsLen'] += 4; // <<<;, just a little bonus
+			$this->keys['keywordsLen'] += 4 + (isset($m[2]) ? strlen($m[2]) : strlen($m[1])); // 4 = <<<;, just a little bonus
 			$this->keys['stringsLen'] += strlen($m[0]);
 			return '';
 		}, $this->rest);
@@ -79,14 +82,14 @@ class PhpLang extends Lang {
 		// keywords
 		$keywords = $this->keywords();
 		foreach ($keywords as $k) {
-			$this->rest = preg_replace_callback('~(?:\W|\s|\@)('.$this->allowUppercase(preg_quote($k)).')\s*(\([^\)]*\))?\b~', function($m) {
+			$this->rest = preg_replace_callback('~(\W)(\@?'.$this->allowUppercase(preg_quote($k)).')\s*(\([^\)]*\))?\b~', function($m) {
 				$this->keys['keywords']++;
-				$this->keys['keywordsLen'] += strlen($m[1]);
-				return '';
+				$this->keys['keywordsLen'] += strlen($m[2]);
+				return $m[1];
 			}, $this->rest);
 		}
 		// functions
-		$this->rest = preg_replace('~(\W)\w+\([^\)]*\)\s*(;|\{)~i', '', $this->rest);
+		$this->rest = preg_replace('~(\W)\w+\([^\)]*\)\s*(;|\{)~i', '$1', $this->rest);
 		// special chars
 		$this->rest = preg_replace('~(\&=|/|\*|=|;|\(|\)|\[|\]|\{|\}|\&\&|\s\&\s|\|\||\@|\.|,|\?|\:|\!|\-|<|>|\+|\d*\.\d+e?|\d+\.\d*e?|0x\d+|\d+e?)~i', ' ', $this->rest);
 		// remove whitespace
@@ -119,21 +122,24 @@ class PhpLang extends Lang {
 	
 	/**
 	 * scan the whole string (this was the safest solution)
-	 * this function also caches the data for the next runs with the same code
 	 */
 	private function removeStringsAndComments() {
-		$cs = md5($this->rest);
-		$lang = 'php';
 		$inString = false;
 		$inComment = false;
 		for ($i = 0, $l = strlen($this->rest); $i < $l; $i++) {
+			// skip if escaped, except you're in a comment
+			// '/* \*/' or '// eol: \' <- don't escape
+			if ($this->rest[$i] == '\\' && !$inComment) {
+				$i++;
+				continue;
+			}
 			if ($inString) {
 				if ($this->rest[$i] == $inString) {
 					// string finished
 					$len = $i - $start + strlen($inString);
 					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inString));
 					$inString = 0;
-					$i -= $len;
+					$i -= $len - (strlen($inString) - 1);
 					$l -= $len;
 					$this->keys['stringsLen'] += $len;
 				}
@@ -143,7 +149,7 @@ class PhpLang extends Lang {
 					$len = $i - $start + strlen($inComment);
 					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inComment));
 					$inComment = 0;
-					$i -= $len;
+					$i -= $len - (strlen($inComment) - 1);
 					$l -= $len;
 					$this->keys['commentsLen'] += $len;
 				}
