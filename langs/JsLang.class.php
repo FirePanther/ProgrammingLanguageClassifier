@@ -15,28 +15,37 @@ class JsLang extends Lang {
 	public function run() {
 		$this->rest = ' '.$this->code.' ';
 		
+		$this->keys['stringsLen'] = 0;
+		$this->keys['commentsLen'] = 0;
+		$this->keys['variablesLen'] = 0;
+		$this->keys['demerit'] = 0;
+		
 		// escapes
 		$this->rest = preg_replace('~\\\\.~', '', $this->rest);
 		// scan the whole string (this was the safest solution)
 		if ($this->removeStringsAndComments() !== null) {
 			// no html
-			$this->rest = preg_replace('~<script[^>]*>.*</script>~is', '', $this->rest);
+			$this->rest = preg_replace_callback('~<script[^>]*>.*</script>~is', function($m) {
+				$this->keys['demerit'] += strlen($m[0]);
+				return '';
+			}, $this->rest);
 			// whitespaces
 			$this->rest = str_replace(["\r\n", "\r"], "\n", $this->rest);
 			$this->rest = preg_replace('~\s+~m', ' ', $this->rest);
 			// regex
 			$this->rest = preg_replace('~/[^/]+/[gim]+~i', ' ', $this->rest);
+			// functions
+			$this->rest = preg_replace('~(\W)function\s+\w+\s*\(~i', '', $this->rest);
+			$this->rest = preg_replace('~(\W)\w+\([^\)]*\)\s*(;|\{)~i', '', $this->rest);
 			// keywords
 			$keywords = $this->keywords();
-			$this->keys['keywords'] = 0;
 			foreach ($keywords as $k) {
 				$this->rest = preg_replace_callback('~\W('.preg_quote($k).')\s*(\([^\)]*\))?\b~', function($m) {
-					if (strlen($m[1]) > 4) $this->keys['keywords']++;
+					$this->keys['keywords']++;
+					$this->keys['keywordsLen'] += strlen($m[1]);
 					return '';
 				}, $this->rest);
 			}
-			// functions
-			$this->rest = preg_replace('~(\W)\w+\([^\)]*\)\s*(;|\{)~i', '', $this->rest);
 			// special chars
 			$this->rest = preg_replace('~(/|\*|=|;|\(|\)|\[|\]|\{|\}|\&|\|\||,|\?|\:|\!|<|>|\+|\-|\d*\.\d+e?|\d+\.\d*e?|0x\d+|\d+e?)~i', ' ', $this->rest);
 			// objects, arrays, variables
@@ -47,8 +56,9 @@ class JsLang extends Lang {
 				$this->rest = preg_replace('~\[[^\]]+\]~i', '', $this->rest);
 			} while($restBackup !== $this->rest);
 			$this->keys['allVarsPhpValid'] = 0; // no variables at all
-			$this->rest = preg_replace_callback('~([a-z\$_][a-z0-9\$_]*)(\.[a-z\$_][a-z0-9\$_]*)~i', function($m) {
+			$this->rest = preg_replace_callback('~([a-z\$_][a-z0-9\$_]*)(\.[a-z\$_][a-z0-9\$_]*)?~i', function($m) {
 				if ($this->keys['allVarsPhpValid'] === 0) $this->keys['allVarsPhpValid'] = 1;
+				$this->keys['variablesLen'] += strlen($m[0]);
 				if (strpos($m[0], '(') === false) {
 					if (!preg_match('~^\$[a-z_]\w*($|\.)~', $m[0])) { // php invalid
 						$this->set('allVarsPhpValid', -1);
@@ -61,6 +71,13 @@ class JsLang extends Lang {
 		} else {
 			$this->errors = true;
 		}
+	}
+	
+	/**
+	 * @see Lang.abstract.php -> demerit()
+	 */
+	public function demerit() {
+		return $this->keys['stringsLen'] + $this->keys['demerit'];
 	}
 	
 	/**
@@ -84,6 +101,7 @@ class JsLang extends Lang {
 					else {
 						$i -= $len;
 						$l -= $len;
+						$this->keys['stringsLen'] += $len;
 					}
 				} elseif ($this->rest[$i] === "\n") {
 					//$error = true;
@@ -97,6 +115,7 @@ class JsLang extends Lang {
 					$inComment = 0;
 					$i -= $len;
 					$l -= $len;
+					$this->keys['commentsLen'] += $len;
 				}
 			} else {
 				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {

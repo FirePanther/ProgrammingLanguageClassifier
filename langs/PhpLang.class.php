@@ -21,30 +21,41 @@ class PhpLang extends Lang {
 	public function run() {
 		$this->rest = ' '.$this->code.' ';
 		
+		$this->keys['stringsLen'] = 0;
+		$this->keys['commentsLen'] = 0;
+		$this->keys['demerit'] = 0;
+		
 		// escapes
 		$this->rest = preg_replace('~\\\\.~', '', $this->rest);
 		// scan the whole string (this was the safest solution)
 		$this->removeStringsAndComments();
+		// no html (js code looks like php sometimes, so let's remove scripts)
+		$this->rest = preg_replace_callback('~<script[^>]*>.*</script>~is', function($m) {
+			$this->keys['demerit'] += strlen($m[0]);
+			return '';
+		}, $this->rest);
 		// whitespaces
 		$this->rest = preg_replace('~\s+~', ' ', $this->rest);
 		// nowdoc/heredoc
 		$this->rest = preg_replace('~<<<\s*(\')?([a-z0-9]+)\1.*\n\2\;~siU', '', $this->rest);
-		// classes and methods
+		// classes, methods, functions
 		$this->rest = preg_replace('~\b(new|class) \w+~', '', $this->rest);
 		$this->rest = preg_replace('~\b\w+\:\:\w+~', '', $this->rest);
 		$this->rest = preg_replace('~(\$\w+\->|function\s+)\w+~', '', $this->rest);
 		// variables
 		$this->rest = preg_replace('~\&?\$[a-z_]\w*~i', '', $this->rest);
 		// functions
-		$this->rest = preg_replace('~(\s|\W)\w+\([^\)]*\)\s*(;|\{)~i', '', $this->rest);
+		$this->rest = preg_replace('~(\W)\w+\([^\)]*\)\s*(;|\{)~i', '', $this->rest);
 		// keywords
 		$keywords = $this->keywords();
-		$this->keys['keywords'] = 0;
 		$this->countKeyword = true;
 		foreach ($keywords as $ka) {
 			foreach ($ka as $k) {
 				$this->rest = preg_replace_callback('~(?:\W|\s|\@)('.$this->allowUppercase(preg_quote($k)).')\s*(\([^\)]*\))?\b~', function($m) {
-					if ($this->countKeyword && strlen($m[1]) > 5) $this->keys['keywords']++;
+					if ($this->countKeyword) {
+						$this->keys['keywords']++;
+						$this->keys['keywordsLen'] += strlen($m[1]);
+					}
 					return '';
 				}, $this->rest);
 			}
@@ -54,6 +65,13 @@ class PhpLang extends Lang {
 		$this->rest = preg_replace('~(\&=|/|\*|=|;|\(|\)|\[|\]|\{|\}|\&\&|\s\&\s|\|\||\@|\.|,|\?|\:|\!|\-|<|>|\+|\d*\.\d+e?|\d+\.\d*e?|0x\d+|\d+e?)~i', ' ', $this->rest);
 		// remove whitespace
 		$this->rest = str_replace(' ', '', $this->rest);
+	}
+	
+	/**
+	 * @see Lang.abstract.php -> demerit()
+	 */
+	public function demerit() {
+		return $this->keys['stringsLen'] + $this->keys['demerit'];
 	}
 	
 	/**
@@ -88,6 +106,7 @@ class PhpLang extends Lang {
 					$inString = 0;
 					$i -= $len;
 					$l -= $len;
+					$this->keys['stringsLen'] += $len;
 				}
 			} elseif ($inComment) {
 				if ($this->rest[$i] == $inComment[0] && (strlen($inComment) == 1 || strlen($inComment) == 2 && $this->rest[$i + 1] == $inComment[1])) {
@@ -97,6 +116,7 @@ class PhpLang extends Lang {
 					$inComment = 0;
 					$i -= $len;
 					$l -= $len;
+					$this->keys['commentsLen'] += $len;
 				}
 			} else {
 				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {
@@ -996,13 +1016,13 @@ class PhpLang extends Lang {
 				'PHP_CONFIG_FILE_SCAN_DIR',
 				'PHP_SHLIB_SUFFIX', 'PHP_FD_SETSIZE',
 				'__COMPILER_HALT_OFFSET__', 'PATHINFO_EXTENSION',
-				'<?php','?>','<?=','<?',
+				'<?php','?>','<?=','<?','require','require_once','include','include_once',
 			],
 			// not sure, don't count keywords
 			[
 				'as','break','case','continue','default','do','else','elseif',
 				'endfor','endforeach','endif','endswitch','endwhile','for',
-				'foreach','if','include','include_once','require','require_once',
+				'foreach','if',
 				'return','switch','throw','while','exit','die',
 				
 				'&new','var','new','private','protected','public','self','const',
