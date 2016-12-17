@@ -27,6 +27,7 @@ class LangDetect {
 	 * checks the code, runs it in every defined language
 	 */
 	public function parseCode($code) {
+		$code = str_replace(["\r\n", "\r"], "\n", $code);
 		$this->code = $code;
 		$this->probabilities = [];
 		
@@ -47,17 +48,14 @@ class LangDetect {
 		
 		/* little collaboration between js and php, if both are active */
 		if (isset($class['js'], $class['php'])) {
-			if ($class['js']->get('allVarsPhpValid') !== null) {
-				// php bonus for "php valid variables" only
-				switch ($class['js']->get('allVarsPhpValid')) {
-					// all variables are php valid, decrease js a bit
-					case 1:
-						$class['js']->set('demerit', $class['js']->get('variablesLen') / 2, '+');
-						break;
+			if ($class['js']->get('validPhpVarsLen') !== null) {
+				// php bonus for "php valid variables"
+				if ($class['js']->get('validPhpVarsLen') > 0) {
+					// most variables are php valid, decrease js, just a bit because it could still be a js var
+					$class['js']->set('demerit', $class['js']->get('validPhpVarsLen') / 2, '+');
+				} elseif ($class['js']->get('validPhpVarsLen') < 0) {
 					// not all variables are php valid, decrease php
-					case -1:
-						$class['php']->set('demerit', $class['js']->get('variablesLen'), '+');
-						break;
+					$class['php']->set('demerit', $class['js']->get('validPhpVarsLen'), '+');
 				}
 			}
 		}
@@ -83,7 +81,7 @@ class LangDetect {
 			}
 			$results = [];
 			foreach ($this->probabilities as $k => $v) {
-				$results[$k] = $v / $total;
+				$results[$k] = $total ? $v / $total : 0;
 			}
 			return $results;
 		} else {
