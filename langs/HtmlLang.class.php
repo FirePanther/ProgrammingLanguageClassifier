@@ -22,6 +22,12 @@ class HtmlLang extends Lang {
 		$this->rest = ' '.strtolower($this->code).' ';
 		$this->keys['demerit'] = -2;
 		
+		$this->keys['stringsLen'] = 0;
+		$this->keys['commentsLen'] = 0;
+		
+		// remove js/php strings and comments
+		$this->removeStringsAndComments();
+		
 		// whitespaces
 		$this->rest = preg_replace_callback('~\s+~', function($m) {
 			$this->keys['demerit'] += strlen($m[0]) - 1;
@@ -58,6 +64,60 @@ class HtmlLang extends Lang {
 			$this->keys['demerit'] += strlen($m[0]);
 			return '';
 		}, $this->rest);
+	}
+	
+	/**
+	 * @see Lang.abstract.php -> demerit()
+	 */
+	public function demerit() {
+		return $this->keys['stringsLen'] + $this->keys['commentsLen'] + $this->keys['demerit'];
+	}
+	
+	/**
+	 * remove strings and comments just to be sure it's not a php or js file with much html
+	 */
+	private function removeStringsAndComments() {
+		$inString = false;
+		$inComment = false;
+		for ($i = 0, $l = strlen($this->rest); $i < $l; $i++) {
+			// skip if escaped, except you're in a comment
+			// '/* \*/' or '// eol: \' <- don't escape
+			if ($this->rest[$i] == '\\' && !$inComment) {
+				$i++;
+				continue;
+			}
+			if ($inString) {
+				if ($this->rest[$i] == $inString) {
+					// string finished
+					$len = $i - $start + strlen($inString);
+					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inString));
+					$inString = 0;
+					$i -= $len - (strlen($inString) - 1);
+					$l -= $len;
+					$this->keys['stringsLen'] += $len;
+				}
+			} elseif ($inComment) {
+				if ($this->rest[$i] == $inComment[0] && (strlen($inComment) == 1 || strlen($inComment) == 2 && $this->rest[$i + 1] == $inComment[1])) {
+					// comment finished
+					$len = $i - $start + strlen($inComment);
+					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inComment));
+					$inComment = 0;
+					$i -= $len - (strlen($inComment) - 1);
+					$l -= $len;
+					$this->keys['commentsLen'] += $len;
+				}
+			} else {
+				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {
+					$inString = $this->rest[$i];
+					$start = $i;
+				} elseif ($this->rest[$i] == '#' || $this->rest[$i] == '/' && ($this->rest[$i + 1] == '*' || $this->rest[$i + 1] == '/')) {
+					$inComment = $this->rest[$i] == '/' && $this->rest[$i + 1] == '*' ? '*/' : "\n";
+					$start = $i;
+					if ($this->rest[$i] !== '#') $i++;
+				}
+			}
+		}
+		return $this->rest;
 	}
 	
 	/**
