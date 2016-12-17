@@ -1,1 +1,1 @@
-console.log('<?php it\'t a trap ?>');
+console.log('<?php it\'s a trap ?>');
