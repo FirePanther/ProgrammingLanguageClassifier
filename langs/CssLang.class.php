@@ -148,7 +148,7 @@ class CssLang extends Lang {
 					$this->keys['stringsLen'] += $len;
 				}
 			} elseif ($inComment) {
-				if ($this->rest[$i] == $inComment[0] && (strlen($inComment) == 1 || strlen($inComment) == 2 && $this->rest[$i + 1] == $inComment[1])) {
+				if (substr($this->rest, $i, strlen($inComment)) == $inComment) {
 					// comment finished
 					$len = $i - $start + strlen($inComment);
 					$bur = $this->rest;
@@ -163,10 +163,20 @@ class CssLang extends Lang {
 				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {
 					$inString = $this->rest[$i];
 					$start = $i;
-				} elseif ($this->rest[$i] == '#' || $this->rest[$i] == '/' && ($this->rest[$i + 1] == '*' || $this->rest[$i + 1] == '/')) {
-					$inComment = $this->rest[$i] == '/' && $this->rest[$i + 1] == '*' ? '*/' : "\n";
+				} elseif ($this->rest[$i] == '#' ||
+						$this->rest[$i] == '/' && ($this->rest[$i + 1] == '*' || $this->rest[$i + 1] == '/') ||
+						substr($this->rest, $i, 4) == '<!--'
+					) {
+					$inComment = $this->rest[$i] == '/' && $this->rest[$i + 1] == '*' ? '*/' : (substr($this->rest, $i, 4) == '<!--' ? '-->' : "\n");
 					$start = $i;
-					if ($this->rest[$i] !== '#') $i++;
+					switch ($this->rest[$i]) {
+						case '/':
+							$i++;
+							break;
+						case '<':
+							$i += 3;
+							break;
+					}
 				}
 			}
 		}

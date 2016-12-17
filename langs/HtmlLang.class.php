@@ -25,6 +25,11 @@ class HtmlLang extends Lang {
 		$this->keys['stringsLen'] = 0;
 		$this->keys['commentsLen'] = 0;
 		
+		// cancel completely if there is php starting tag
+		if (strpos($this->code, '<?') !== false) {
+			$this->errors = true;
+			return;
+		}
 		// remove js/php strings and comments
 		$this->removeStringsAndComments();
 		
