@@ -20,33 +20,44 @@ class HtmlLang extends Lang {
 	 */
 	public function run() {
 		$this->rest = ' '.strtolower($this->code).' ';
-		
-		$this->keys['keywords'] = 0;
+		$this->keys['demerit'] = -2;
 		
 		// whitespaces
-		$this->rest = preg_replace('~\s+~', ' ', $this->rest);
+		$this->rest = preg_replace_callback('~\s+~', function($m) {
+			$this->keys['demerit'] += strlen($m[0]) - 1;
+			return ' ';
+		}, $this->rest);
 		// strings and textnodes
-		$this->rest = preg_replace('~>.*?<~', '><', $this->rest);
+		$backupRest = $this->rest;
+		$this->rest = preg_replace_callback('~>[^><]+<~', function($m) {
+			$this->keys['demerit'] += strlen($m[0]) - 2;
+			return '><';
+		}, $this->rest);
 		$this->rest = preg_replace('~("|\')[^\1]\1~', '', $this->rest);
 		// doctype, comments, xml
 		$this->rest = preg_replace('~<\!\-\-.*?\-\->~', '', $this->rest);
 		$this->rest = preg_replace('~<\!.*?>~', '', $this->rest);
 		$this->rest = preg_replace('~<\?xml .*?\?>~', '', $this->rest);
 		// inline stuff
-		$this->rest = preg_replace_callback('~<(script|style|svg).*?>.*?</\1>~', function() {
+		$this->rest = preg_replace_callback('~<(script|style|svg)(.*?)>.*?</\1>~', function($m) {
 			$this->keys['keywords']++;
+			$this->keys['keywordsLen'] += (strlen($m[1]) + 2) * 2 + 1 + strlen($m[2]);
 			return '';
 		}, $this->rest);
 		// tags
 		$tags = $this->tags();
 		foreach ($tags as $t) {
-			$this->rest = preg_replace_callback('~</?'.$t.'( [^>]*)?>~', function() {
+			$this->rest = preg_replace_callback('~</?'.$t.'( [^>]*)?>~', function($m) {
 				$this->keys['keywords']++;
+				$this->keys['keywordsLen'] += strlen($m[0]);
 				return '';
 			}, $this->rest);
 		}
 		// remove whitespace
-		$this->rest = str_replace(' ', '', $this->rest);
+		$this->rest = preg_replace_callback('~\s+~', function($m) {
+			$this->keys['demerit'] += strlen($m[0]);
+			return '';
+		}, $this->rest);
 	}
 	
 	/**
