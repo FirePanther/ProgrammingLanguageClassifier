@@ -20,10 +20,15 @@ class JsLang extends Lang {
 		$this->keys['commentsLen'] = 0;
 		$this->keys['variablesLen'] = 0;
 		
-		// escapes
-		$this->rest = preg_replace('~\\\\.~', '', $this->rest);
 		// scan the whole string (this was the safest solution)
 		if ($this->removeStringsAndComments() !== null) {
+			// escapes
+			$this->rest = preg_replace('~\\\\.~', '', $this->rest); // remove escape after string&comment removal, else /* \*/ will be buggy
+			// no nowdoc/heredoc
+			if (preg_match('~<<<\s*(\'|)([a-z0-9]+)\1\n.*\n\2\;~siU', $this->rest)) {
+				$this->errors = true;
+				return;
+			}
 			// no html
 			$this->rest = preg_replace_callback('~<script[^>]*>.*</script>~is', function($m) {
 				$this->keys['demerit'] += strlen($m[0]);
@@ -49,18 +54,22 @@ class JsLang extends Lang {
 				$this->keys['demerit'] -= 2;
 				return $m[1].'(){';
 			}, $this->rest);
+			// regex
+			$this->rest = preg_replace_callback('~/[^/]*/[gim]*~', function($m) {
+				$this->keys['keywords']++;
+				$this->keys['keywordsLen'] += strlen($m[0]) - 1;
+				return ' ';
+			}, $this->rest);
 			// - the ">" enables a bit of ecmascript 6 validity
-			if (preg_match('~[^,\{\(\)\[\=\|\&\!\?\:>]\{~', $this->rest)) {
+			if (preg_match('~[^,\{\(\)\[\=\|\&\!\?\:>;]\{~', $this->rest)) {
 				$this->errors = true;
 				return;
 			}
 			// whitespaces
-			$this->rest = preg_replace_callback('~\s+~m', function($m) {
+			$this->rest = preg_replace_callback('~[ ]+~', function($m) {
 				$this->keys['demerit'] += strlen($m[0]) - 1;
 				return ' ';
 			}, $this->rest);
-			// regex
-			$this->rest = preg_replace('~/[^/]+/[gim]+~i', ' ', $this->rest);
 			// function declarations and anonymous functions
 			$this->rest = preg_replace_callback('~(\W)function(\s+\w+)?\s*\(~i', function($m) {
 				$this->keys['keywords']++;
@@ -102,7 +111,7 @@ class JsLang extends Lang {
 					'class','declare','extends','interface','namespace'
 				]))) {
 					if (preg_match('~^\$[a-z_]\w*($|\.)~', $m[0])) $this->keys['validPhpVarsLen'] += strlen($m[0]);
-					else $this->keys['validPhpVarsLen'] += strlen($m[0]);
+					else $this->keys['validPhpVarsLen'] -= strlen($m[0]);
 				}
 				return '';
 			}, $this->rest);
@@ -125,15 +134,18 @@ class JsLang extends Lang {
 	
 	/**
 	 * scan the whole string (this was the safest solution)
-	 * this function also caches the data for the next runs with the same code
 	 */
 	private function removeStringsAndComments() {
-		$cs = md5($this->rest);
-		$lang = 'js';
 		$inString = false;
 		$inComment = false;
 		$error = false;
 		for ($i = 0, $l = strlen($this->rest); $i < $l; $i++) {
+			// skip if escaped, except you're in a comment
+			// '/* \*/' or '// eol: \' <- don't escape
+			if ($this->rest[$i] == '\\' && !$inComment) {
+				$i++;
+				continue;
+			}
 			if ($inString) {
 				if ($this->rest[$i] == $inString) {
 					// string finished
@@ -142,7 +154,7 @@ class JsLang extends Lang {
 					$inString = 0;
 					if ($error) $error = false;
 					else {
-						$i -= $len;
+						$i -= $len - (strlen($inString) - 1);
 						$l -= $len;
 						$this->keys['stringsLen'] += $len;
 					}
@@ -156,7 +168,7 @@ class JsLang extends Lang {
 					$len = $i - $start + strlen($inComment);
 					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inComment));
 					$inComment = 0;
-					$i -= $len;
+					$i -= $len - (strlen($inComment) - 1);
 					$l -= $len;
 					$this->keys['commentsLen'] += $len;
 				}
