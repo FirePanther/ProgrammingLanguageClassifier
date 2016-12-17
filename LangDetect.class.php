@@ -44,22 +44,6 @@ class LangDetect {
 			}
 		}
 		
-		### some bonuses and demerits for language specific stuff (like keywords)
-		
-		/* little collaboration between js and php, if both are active */
-		if (isset($class['js'], $class['php'])) {
-			if ($class['js']->get('validPhpVarsLen') !== null) {
-				// php bonus for "php valid variables"
-				if ($class['js']->get('validPhpVarsLen') > 0) {
-					// most variables are php valid, decrease js, just a bit because it could still be a js var
-					$class['js']->set('demerit', abs($class['js']->get('validPhpVarsLen') / 2), '+');
-				} elseif ($class['js']->get('validPhpVarsLen') < 0) {
-					// not all variables are php valid, decrease php
-					$class['php']->set('demerit', -$class['js']->get('validPhpVarsLen'), '+');
-				}
-			}
-		}
-		
 		// fetch all probabilities and sort them
 		foreach ($class as $lang => $c) {
 			$this->probabilities[$lang] = $c->probability();

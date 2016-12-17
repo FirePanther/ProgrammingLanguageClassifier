@@ -115,6 +115,13 @@ class JsLang extends Lang {
 				}
 				return '';
 			}, $this->rest);
+			if ($this->keys['validPhpVarsLen'] > 0) {
+				// most variables are php valid, decrease js, just a bit because it could still be a js var
+				$this->keys['demerit'] += ceil($this->keys['validPhpVarsLen'] / 2);
+			} elseif ($this->keys['validPhpVarsLen'] < 0) {
+				// not all variables are php valid, increase js (better against php)
+				$this->keys['demerit'] += $this->keys['validPhpVarsLen'];
+			}
 			// remove whitespace
 			$this->rest = preg_replace_callback('~\s+~', function($m) {
 				$this->keys['demerit'] += strlen($m[0]);
