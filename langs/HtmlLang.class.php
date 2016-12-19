@@ -102,27 +102,40 @@ class HtmlLang extends Lang {
 					$this->keys['stringsLen'] += $len;
 				}
 			} elseif ($inComment) {
-				if ($this->rest[$i] == $inComment[0] && (strlen($inComment) == 1 || strlen($inComment) == 2 && $this->rest[$i + 1] == $inComment[1])) {
+				if (substr($this->rest, $i, strlen($inComment)) == $inComment) {
 					// comment finished
 					$len = $i - $start + strlen($inComment);
 					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inComment));
-					$inComment = 0;
 					$i -= $len - (strlen($inComment) - 1);
 					$l -= $len;
+					// keyword bonus for html
+					if ($inComment == '-->') {
+						$this->keys['keywords']++;
+						$this->keys['keywordsLen'] += $len;
+					}
+					$inComment = 0;
 					$this->keys['commentsLen'] += $len;
 				}
 			} else {
-				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {
+				$c = $this->rest[$i];
+				// strings
+				if ($c == '\'' || $c == '"') {
 					$inString = $this->rest[$i];
 					$start = $i;
-				} elseif ($this->rest[$i] == '#' || $this->rest[$i] == '/' && ($this->rest[$i + 1] == '*' || $this->rest[$i + 1] == '/')) {
-					$inComment = $this->rest[$i] == '/' && $this->rest[$i + 1] == '*' ? '*/' : "\n";
+				// default single- and multi-line comments
+				} elseif (in_array(substr($this->rest, $i, 2), ['/*', '//'])) {
+					$inComment = $this->rest[$i + 1] == '*' ? '*/' : "\n";
 					$start = $i;
-					if ($this->rest[$i] !== '#') $i++;
+					$i ++;
+				// html comments
+				} elseif (substr($this->rest, $i, 4) == '<!--') {
+					$inComment = $this->rest[$i] == '/' && $this->rest[$i + 1] == '*' ? '*/' : (substr($this->rest, $i, 4) == '<!--' ? '-->' : "\n");
+					$start = $i;
+					$i += 3;
 				}
 			}
 		}
-		return $this->rest;
+		return true;
 	}
 	
 	/**
