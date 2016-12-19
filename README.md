@@ -35,9 +35,9 @@ We did a little contest and developed this for one to two days.
 
 You can find more tricky tests of this contest here: https://su.at/f1
 
-Code by @webfashionist: https://github.com/webfashionist/DevClassify  
-Code by @marco-a: will be pushed later  
-Code by @DRP96: will be pushed later
+Code by [@webfashionist](https://github.com/webfashionist): https://github.com/webfashionist/DevClassify  
+Code by [@marco-a](https://github.com/marco-a): will be pushed later  
+Code by [@DRP96](https://github.com/DRP96): will be pushed later
 
 # License
 
