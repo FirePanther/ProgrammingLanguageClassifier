@@ -55,11 +55,19 @@ class JsLang extends Lang {
 				return $m[1].'(){';
 			}, $this->rest);
 			// regex
-			$this->rest = preg_replace_callback('~/[^/]*/[gim]*~', function($m) {
-				$this->keys['keywords']++;
-				$this->keys['keywordsLen'] += strlen($m[0]) - 1;
-				return ' ';
-			}, $this->rest);
+			do {
+				$restBackup = $this->rest;
+				$this->rest = preg_replace_callback('~/[^/]*/[gim]*( *(?:[\n,.;\)\]\:\?\}]))~', function($m) {
+					$this->keys['keywords']++;
+					$this->keys['keywordsLen'] += strlen($m[0]) - 1 - strlen($m[1]);
+					return ' '.$m[1];
+				}, $this->rest);
+			} while($this->rest !== $restBackup);
+			// e.g. php comments
+			if (strpos($this->rest, '#') !== false) {
+				$this->errors = true;
+				return;
+			}
 			// - the ">" enables a bit of ecmascript 6 validity
 			if (preg_match('~[^,\{\(\)\[\=\|\&\!\?\:>;]\{~', $this->rest)) {
 				$this->errors = true;
@@ -145,7 +153,6 @@ class JsLang extends Lang {
 	private function removeStringsAndComments() {
 		$inString = false;
 		$inComment = false;
-		$error = false;
 		for ($i = 0, $l = strlen($this->rest); $i < $l; $i++) {
 			// skip if escaped, except you're in a comment
 			// '/* \*/' or '// eol: \' <- don't escape
@@ -156,21 +163,17 @@ class JsLang extends Lang {
 			if ($inString) {
 				if ($this->rest[$i] == $inString) {
 					// string finished
-					$len = $i - $start + strlen($inString);
-					$this->rest = substr($this->rest, 0, $start).($error ? str_repeat('\'', $len) : '').substr($this->rest, $i + strlen($inString));
+					$len = $i - $start + 1;
+					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + 1);
 					$inString = 0;
-					if ($error) $error = false;
-					else {
-						$i -= $len - (strlen($inString) - 1);
-						$l -= $len;
-						$this->keys['stringsLen'] += $len;
-					}
+					$i -= $len;
+					$l -= $len;
+					$this->keys['stringsLen'] += $len;
 				} elseif ($this->rest[$i] === "\n") {
-					//$error = true;
 					return null; // completely cancel after syntax error
 				}
 			} elseif ($inComment) {
-				if ($this->rest[$i] == $inComment[0] && (strlen($inComment) == 1 || strlen($inComment) == 2 && $this->rest[$i + 1] == $inComment[1])) {
+				if (substr($this->rest, $i, strlen($inComment)) == $inComment) {
 					// comment finished
 					$len = $i - $start + strlen($inComment);
 					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inComment));
@@ -180,17 +183,23 @@ class JsLang extends Lang {
 					$this->keys['commentsLen'] += $len;
 				}
 			} else {
-				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {
+				$c = $this->rest[$i];
+				// strings
+				if ($c == '\'' || $c == '"') {
 					$inString = $this->rest[$i];
 					$start = $i;
-				} elseif ($this->rest[$i] == '/' && ($this->rest[$i + 1] == '*' || $this->rest[$i + 1] == '/')) {
+				// default single- and multi-line comments
+				} elseif (in_array(substr($this->rest, $i, 2), ['/*', '//'])) {
 					$inComment = $this->rest[$i + 1] == '*' ? '*/' : "\n";
 					$start = $i;
-					$i++;
+					$i ++;
+				// html comments
+				} elseif (substr($this->rest, $i, 4) == '<!--') {
+					return null;
 				}
 			}
 		}
-		return $this->rest;
+		return true;
 	}
 	
 	
