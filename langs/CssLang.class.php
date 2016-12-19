@@ -120,7 +120,7 @@ class CssLang extends Lang {
 	 * @see Lang.abstract.php -> demerit()
 	 */
 	public function demerit() {
-		return $this->keys['stringsLen'] + $this->keys['commentsLen'] + $this->keys['demerit'];
+		return $this->keys['stringsLen'] + $this->keys['demerit'];
 	}
 	
 	/**
@@ -132,7 +132,6 @@ class CssLang extends Lang {
 		for ($i = 0, $l = strlen($this->rest); $i < $l; $i++) {
 			// skip if escaped, except you're in a comment
 			// '/* \*/' or '// eol: \' <- don't escape
-			if (!isset($this->rest[$i])) echo "WARNING: $i;";
 			if ($this->rest[$i] == '\\' && !$inComment) {
 				$i++;
 				continue;
@@ -151,37 +150,32 @@ class CssLang extends Lang {
 				if (substr($this->rest, $i, strlen($inComment)) == $inComment) {
 					// comment finished
 					$len = $i - $start + strlen($inComment);
-					$bur = $this->rest;
 					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inComment));
-					$bui = $i;
 					$i -= $len - (strlen($inComment) - 1);
 					$l -= $len;
 					$inComment = 0;
 					$this->keys['commentsLen'] += $len;
 				}
 			} else {
-				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {
+				$c = $this->rest[$i];
+				// strings
+				if ($c == '\'' || $c == '"') {
 					$inString = $this->rest[$i];
 					$start = $i;
-				} elseif ($this->rest[$i] == '#' ||
-						$this->rest[$i] == '/' && ($this->rest[$i + 1] == '*' || $this->rest[$i + 1] == '/') ||
-						substr($this->rest, $i, 4) == '<!--'
-					) {
-					$inComment = $this->rest[$i] == '/' && $this->rest[$i + 1] == '*' ? '*/' : (substr($this->rest, $i, 4) == '<!--' ? '-->' : "\n");
+				// default single- and multi-line comments
+				} elseif (substr($this->rest, $i, 2) == '/*') {
+					$inComment = $this->rest[$i + 1] == '*' ? '*/' : "\n";
 					$start = $i;
-					switch ($this->rest[$i]) {
-						case '/':
-							$i++;
-							break;
-						case '<':
-							$i += 3;
-							break;
-					}
+					$i ++;
+				// html comments
+				} elseif (substr($this->rest, $i, 4) == '<!--') {
+					return null;
 				}
 			}
 		}
-		return $this->rest;
+		return true;
 	}
+	
 	/**
 	 * css keywords
 	 */
