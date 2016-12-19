@@ -6,7 +6,7 @@
  */
 require_once __DIR__.'/Lang.abstract.php';
 class PhpLang extends Lang {
-	protected $code, $rest, $keys;
+	protected $code, $rest, $keys, $errors = false;
 	
 	/**
 	 * @see Lang.abstract.php -> __construct()
@@ -26,77 +26,80 @@ class PhpLang extends Lang {
 		$this->keys['commentsLen'] = 0;
 		
 		// scan the whole string (this was the safest solution)
-		$this->removeStringsAndComments();
-		// escapes
-		$this->rest = preg_replace('~\\\\.~', '', $this->rest); // remove escape after string&comment removal, else /* \*/ will be buggy
-		// no html (js code looks like php sometimes, so let's remove scripts)
-		$this->rest = preg_replace_callback('~<script[^>]*>.*</script>~is', function($m) {
-			$this->keys['demerit'] += strlen($m[0]);
-			return '';
-		}, $this->rest);
-		// curly brace whitespace
-		$this->rest = preg_replace_callback('~\s+\{~i', function($m) {
-			$this->keys['demerit'] += strlen($m[0]) - 1;
-			return '{';
-		}, $this->rest);
-		// invalidate on some css or js like: '[attr]{' or '[{' or '{a:{'
-		if (preg_match('~[\]\[\:]\{~', $this->rest)) {
-			$this->errors = true;
-			return;
-		}
-		// whitespaces
-		$this->rest = preg_replace_callback('~ +~', function($m) {
-			$this->keys['demerit'] += strlen($m[0]) - 1;
-			return ' ';
-		}, $this->rest);
-		// nowdoc/heredoc
-		$this->rest = preg_replace_callback('~<<<\s*(\'|)([a-z0-9]+)\1\n.*\n\2\;~siU', function($m) {
-			$this->keys['keywords']++;
-			$this->keys['keywordsLen'] += 4 + (isset($m[2]) ? strlen($m[2]) : strlen($m[1])); // 4 = <<<;, just a little bonus
-			$this->keys['stringsLen'] += strlen($m[0]);
-			return '';
-		}, $this->rest);
-		// classes, methods, functions
-		$this->rest = preg_replace_callback('~\b(new|class) \w+~', function($m) {
-			$this->keys['keywords']++;
-			$this->keys['keywordsLen'] += strlen($m[1]);
-			return '';
-		}, $this->rest);
-		$this->rest = preg_replace('~\b\w+\:\:\w+~', '', $this->rest);
-		$this->rest = preg_replace_callback('~(\$\w+\->|function\s+)(\w+)\s*\(~', function($m) {
-			if (trim($m[1]) == 'function') {
-				$this->keys['keywords']++;
-				$this->keys['keywordsLen'] += 8;
-			} elseif ($m[1] == '$this->') {
-				$this->keys['keywords']++;
-				$this->keys['keywordsLen'] += 7;
-			}
-			if (preg_match('~^__(construct|destruct|call|callStatic|get|set|isset|unset|sleep|wakeup|toString|set_state|clone|debugInfo)$~', $m[2])) {
-				$this->keys['keywords']++;
-				$this->keys['keywordsLen'] += strlen($m[2]);
-			}
-			return '';
-		}, $this->rest);
-		// variables
-		$this->rest = preg_replace('~\&?\$[a-z_]\w*~i', '', $this->rest);
-		// keywords
-		$keywords = $this->keywords();
-		foreach ($keywords as $k) {
-			$this->rest = preg_replace_callback('~(\W)(\@?'.$this->allowUppercase(preg_quote($k)).')\s*(\([^\)]*\))?\b~', function($m) {
-				$this->keys['keywords']++;
-				$this->keys['keywordsLen'] += strlen($m[2]);
-				return $m[1];
+		if ($this->removeStringsAndComments() !== null) {
+			// escapes
+			$this->rest = preg_replace('~\\\\.~', '', $this->rest); // remove escape after string&comment removal, else /* \*/ will be buggy
+			// no html (js code looks like php sometimes, so let's remove scripts)
+			$this->rest = preg_replace_callback('~<script[^>]*>.*</script>~is', function($m) {
+				$this->keys['demerit'] += strlen($m[0]);
+				return '';
 			}, $this->rest);
+			// curly brace whitespace
+			$this->rest = preg_replace_callback('~\s+\{~i', function($m) {
+				$this->keys['demerit'] += strlen($m[0]) - 1;
+				return '{';
+			}, $this->rest);
+			// invalidate on some css or js like: '[attr]{' or '[{' or '{a:{'
+			if (preg_match('~[\]\[\:]\{~', $this->rest)) {
+				$this->errors = true;
+				return;
+			}
+			// whitespaces
+			$this->rest = preg_replace_callback('~ +~', function($m) {
+				$this->keys['demerit'] += strlen($m[0]) - 1;
+				return ' ';
+			}, $this->rest);
+			// nowdoc/heredoc
+			$this->rest = preg_replace_callback('~<<<\s*(\'|)([a-z0-9]+)\1\n.*\n\2\;~siU', function($m) {
+				$this->keys['keywords']++;
+				$this->keys['keywordsLen'] += 4 + (isset($m[2]) ? strlen($m[2]) : strlen($m[1])); // 4 = <<<;, just a little bonus
+				$this->keys['stringsLen'] += strlen($m[0]);
+				return '';
+			}, $this->rest);
+			// classes, methods, functions
+			$this->rest = preg_replace_callback('~\b(new|class) \w+~', function($m) {
+				$this->keys['keywords']++;
+				$this->keys['keywordsLen'] += strlen($m[1]);
+				return '';
+			}, $this->rest);
+			$this->rest = preg_replace('~\b\w+\:\:\w+~', '', $this->rest);
+			$this->rest = preg_replace_callback('~(\$\w+\->|function\s+)(\w+)\s*\(~', function($m) {
+				if (trim($m[1]) == 'function') {
+					$this->keys['keywords']++;
+					$this->keys['keywordsLen'] += 8;
+				} elseif ($m[1] == '$this->') {
+					$this->keys['keywords']++;
+					$this->keys['keywordsLen'] += 7;
+				}
+				if (preg_match('~^__(construct|destruct|call|callStatic|get|set|isset|unset|sleep|wakeup|toString|set_state|clone|debugInfo)$~', $m[2])) {
+					$this->keys['keywords']++;
+					$this->keys['keywordsLen'] += strlen($m[2]);
+				}
+				return '';
+			}, $this->rest);
+			// variables
+			$this->rest = preg_replace('~\&?\$[a-z_]\w*~i', '', $this->rest);
+			// keywords
+			$keywords = $this->keywords();
+			foreach ($keywords as $k) {
+				$this->rest = preg_replace_callback('~(\W)(\@?'.$this->allowUppercase(preg_quote($k)).')\s*(\([^\)]*\))?\b~', function($m) {
+					$this->keys['keywords']++;
+					$this->keys['keywordsLen'] += strlen($m[2]);
+					return $m[1];
+				}, $this->rest);
+			}
+			// functions
+			$this->rest = preg_replace('~(\W)\w+\([^\)]*\)\s*(;|\{)~i', '$1', $this->rest);
+			// special chars
+			$this->rest = preg_replace('~(\&=|/|\*|=|;|\(|\)|\[|\]|\{|\}|\&\&|\s\&\s|\|\||\@|\.|,|\?|\:|\!|\-|<|>|\+|\d*\.\d+e?|\d+\.\d*e?|0x\d+|\d+e?)~i', ' ', $this->rest);
+			// remove whitespace
+			$this->rest = preg_replace_callback('~\s+~', function($m) {
+				$this->keys['demerit'] += strlen($m[0]);
+				return '';
+			}, $this->rest);
+		} else {
+			$this->errors = true;
 		}
-		// functions
-		$this->rest = preg_replace('~(\W)\w+\([^\)]*\)\s*(;|\{)~i', '$1', $this->rest);
-		// special chars
-		$this->rest = preg_replace('~(\&=|/|\*|=|;|\(|\)|\[|\]|\{|\}|\&\&|\s\&\s|\|\||\@|\.|,|\?|\:|\!|\-|<|>|\+|\d*\.\d+e?|\d+\.\d*e?|0x\d+|\d+e?)~i', ' ', $this->rest);
-		// remove whitespace
-		$this->rest = preg_replace_callback('~\s+~', function($m) {
-			$this->keys['demerit'] += strlen($m[0]);
-			return '';
-		}, $this->rest);
 	}
 	
 	/**
@@ -144,7 +147,7 @@ class PhpLang extends Lang {
 					$this->keys['stringsLen'] += $len;
 				}
 			} elseif ($inComment) {
-				if ($this->rest[$i] == $inComment[0] && (strlen($inComment) == 1 || strlen($inComment) == 2 && $this->rest[$i + 1] == $inComment[1])) {
+				if (substr($this->rest, $i, strlen($inComment)) == $inComment) {
 					// comment finished
 					$len = $i - $start + strlen($inComment);
 					$this->rest = substr($this->rest, 0, $start).substr($this->rest, $i + strlen($inComment));
@@ -154,17 +157,24 @@ class PhpLang extends Lang {
 					$this->keys['commentsLen'] += $len;
 				}
 			} else {
-				if ($this->rest[$i] == '\'' || $this->rest[$i] == '"') {
+				$c = $this->rest[$i];
+				// strings
+				if ($c == '\'' || $c == '"') {
 					$inString = $this->rest[$i];
 					$start = $i;
-				} elseif ($this->rest[$i] == '#' || $this->rest[$i] == '/' && ($this->rest[$i + 1] == '*' || $this->rest[$i + 1] == '/')) {
-					$inComment = $this->rest[$i] == '/' && $this->rest[$i + 1] == '*' ? '*/' : "\n";
+				// e.g. php comments
+				} elseif ($c == '#') {
+					$inComment = "\n";
 					$start = $i;
-					if ($this->rest[$i] !== '#') $i++;
+				// default single- and multi-line comments
+				} elseif (in_array(substr($this->rest, $i, 2), ['/*', '//'])) {
+					$inComment = $this->rest[$i + 1] == '*' ? '*/' : "\n";
+					$start = $i;
+					$i ++;
 				}
 			}
 		}
-		return $this->rest;
+		return true;
 	}
 	
 	/**
