@@ -9,9 +9,9 @@ class LangDetect {
 	private $probabilities = [];
 	private $code = '';
 	
-	function __construct($code = null, $langs = null) {
+	function __construct($code = null, $langs = null, $showTime = false) {
 		$this->setLangs($langs);
-		if ($code !== null) $this->parseCode($code);
+		if ($code !== null) $this->parseCode($code, $showTime);
 	}
 	
 	/**
@@ -26,20 +26,21 @@ class LangDetect {
 	/**
 	 * checks the code, runs it in every defined language
 	 */
-	public function parseCode($code) {
+	public function parseCode($code, $showTime = false) {
 		$code = str_replace(["\r\n", "\r"], "\n", $code);
 		$this->code = $code;
 		$this->probabilities = [];
 		
 		// track time
-		$startTime = microtime(1);
+		if ($showTime) $startTime = microtime(1);
 		
 		// call all language classes
+		$class = [];
 		foreach ($this->langs as $lang) {
 			$lang = strtolower($lang);
 			$langClass = ucfirst($lang).'Lang';
-			if (file_exists("langs/$langClass.class.php")) {
-				require_once "langs/$langClass.class.php";
+			if (file_exists(__DIR__."/langs/$langClass.class.php")) {
+				require_once __DIR__."/langs/$langClass.class.php";
 				$class[$lang] = new $langClass($this->code, false);
 			}
 		}
@@ -50,7 +51,7 @@ class LangDetect {
 		}
 		arsort($this->probabilities, SORT_NUMERIC);
 		
-		echo 'time: '.round(microtime(1) - $startTime, 3).' s'.PHP_EOL;
+		if ($showTime) echo 'time: '.(microtime(true) - $startTime).' s'.PHP_EOL;
 	}
 	
 	/**
